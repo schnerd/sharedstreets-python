@@ -1,25 +1,35 @@
 """
 Aggregates hourly weekly binned linear references into a daily
 
-This script takes weekly binned linear reference tiles, which normally have
-24 values for each bin (one for each hour in the day), and aggregates
-those 24 values into a single value for the whole day, outputing the resulting
-tiles into a file on disk.
+This script takes event tiles with SharedStreetsWeeklyBinnedLinearReferences events,
+which normally have 24 values for each bin (one for each hour in the day), and aggregates
+those 24 values into a single value for the whole day, writing the resulting
+tiles in SharedStreetsBinnedLinearReferences format to the output directory
 
-See the SharedStreetsWeeklyBinnedLinearReferences protobuf schema here:
+See the the various event type protobuf schemas here:
 https://github.com/sharedstreets/sharedstreets-ref-system/blob/master/proto/linear_references.proto
 """
 
 import json
 import re
+import sys
 from os import listdir
-from os.path import isfile, join
+from os.path import isfile, join, isdir, basename
 from sharedstreets.linear_references import load_binned_events
 from sharedstreets.linear_references_pb2 import SharedStreetsWeeklyBinnedLinearReferences, SharedStreetsBinnedLinearReferences, DataBin
 from sharedstreets.tile import get_tile, make_geojson
 import google.protobuf.message
 from google.protobuf.internal.decoder import _DecodeVarint32
 from google.protobuf.internal.encoder import _VarintEncoder
+
+if len(sys.argv) < 3:
+    sys.exit("Usage: python events-aggregate.py [input_path] [output_path]")
+
+input_path = sys.argv[1]
+output_path = sys.argv[2]
+
+if not isdir(output_path):
+    sys.exit("%s is not a directory" % output_path)
 
 
 def read_objects(position, content, DataClass):
@@ -38,9 +48,10 @@ def read_objects(position, content, DataClass):
         else:
             yield object
 
-def processTile(file_name):
+
+def process_tile(file_path):
     # Parse zoom, x, y, out of file name
-    groups = re.search("(\d+)-(\d+)-(\d+).events.pbf", file_name).groups()
+    groups = re.search("(\d+)-(\d+)-(\d+).events.pbf", file_path).groups()
     zoom = int(groups[0])
     x = int(groups[1])
     y = int(groups[2])
@@ -48,10 +59,10 @@ def processTile(file_name):
     print("Processing tile %d-%d-%d" % (zoom, x, y))
 
     # Write into the adjacent events_agg folder
-    file_name_out = file_name.replace('events_filtered', 'events_agg')
+    file_path_out = join(output_path, basename(file_path))
 
-    with open(file_name_out, 'wb') as file_out:
-        with open(file_name, 'rb') as file:
+    with open(file_path_out, 'wb') as file_out:
+        with open(file_path, 'rb') as file:
             for o in read_objects(0, file.read(), SharedStreetsWeeklyBinnedLinearReferences):
                 # Create a new linear reference with the same settings
                 out = SharedStreetsBinnedLinearReferences()
@@ -63,7 +74,7 @@ def processTile(file_name):
 
                 # But aggregate the event data
                 for b in o.binnedPeriodicData:
-                  out.bins.extend([agg_bin(b)])
+                    out.bins.extend([agg_bin(b)])
 
                 # Write the data
                 pbf_data = out.SerializeToString()
@@ -72,49 +83,45 @@ def processTile(file_name):
                 file_out.write(pbf_data)
 
 # Aggregates all the time periods in a bin into a single bin with a single time period
+
+
 def agg_bin(b):
-  counts = {}
-  values = {}
-  for v in b.bins:
-    i = 0
-    while i < len(v.dataType):
-      d = v.dataType[i]
-      if d not in counts:
-        counts[d] = 0
-        values[d] = 0
-      counts[d] += v.count[i]
-      values[d] += v.value[i]
-      i += 1
-  
-  new_bin = DataBin()
-  for dataType, count in counts.items():
-    new_bin.dataType.append(dataType)
-    new_bin.count.append(count)
-    new_bin.value.append(values[dataType])
+    counts = {}
+    values = {}
+    for v in b.bins:
+        i = 0
+        while i < len(v.dataType):
+            d = v.dataType[i]
+            if d not in counts:
+                counts[d] = 0
+                values[d] = 0
+            counts[d] += v.count[i]
+            values[d] += v.value[i]
+            i += 1
 
-  return new_bin
+    new_bin = DataBin()
+    for dataType, count in counts.items():
+        new_bin.dataType.append(dataType)
+        new_bin.count.append(count)
+        new_bin.value.append(values[dataType])
+
+    return new_bin
 
 
-# You can read all tiles from a specific directory if you want
-input_path = '/Users/dschnurr/Downloads/ss-dc-tiles/output_tiles/2017-10-30/events_filtered'
-input_files = [f for f in listdir(input_path) if isfile(join(input_path, f))]
+def is_pbf_file(path):
+    return isfile(path) and path.endswith('.events.pbf')
 
-# However that is *a lot* of data, for now we'll just pick a few tiles downtown
-input_files = [
-    #'12-1170-1565.events.pbf',
-    #'12-1170-1566.events.pbf',
-    #'12-1170-1567.events.pbf',
-    #'12-1171-1565.events.pbf',
-    '12-1171-1566.events.pbf'
-    #'12-1171-1567.events.pbf',
-    #'12-1172-1565.events.pbf'
-    #'12-1172-1566.events.pbf',
-    #'12-1172-1567.events.pbf',
-]
 
-for i, filename in enumerate(input_files):
-    if filename.startswith('.'):
-        continue
+if input_path.endswith('.pbf'):
+    input_files = [input_path]
+else:
+    input_files = [join(input_path, f) for f in listdir(input_path)]
+
+input_files = [f for f in input_files if is_pbf_file(f)]
+
+if len(input_files) < 1:
+    sys.exit("No files found in input path")
+
+for i, file_path in enumerate(input_files):
     print("Processing file (%d of %d)" % (i + 1, len(input_files)))
-    processTile(join(input_path, filename))
-
+    process_tile(file_path)

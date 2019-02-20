@@ -1,6 +1,6 @@
 """
-Generates a pickup/dropoff event geojson file from one or mote SharedStreets
-weekly binned linear reference tiles. This geojson file is suitable for
+Generates a events geojson file from one or more SharedStreets
+binned linear reference tiles. This geojson file is suitable for
 visualizing in a tool like kepler.
 
 See the SharedStreetsWeeklyBinnedLinearReferences protobuf schema here:
@@ -9,14 +9,21 @@ https://github.com/sharedstreets/sharedstreets-ref-system/blob/master/proto/line
 
 import json
 import re
+import sys
 from os import listdir
 from os.path import isfile, join
 from sharedstreets.linear_references import load_binned_events
 from sharedstreets.tile import get_tile, make_geojson
 from shapely.geometry import LineString
 
+if len(sys.argv) < 3:
+    sys.exit("Usage: python events-to-geojson.py [input_path] [output_file]")
 
-def createLineString(geom, is_forward):
+input_path = sys.argv[1]
+output_file = sys.argv[2]
+
+
+def create_line_string(geom, is_forward):
     ls = LineString([(geom.lonlats[i], geom.lonlats[i + 1])
                      for i in range(0, len(geom.lonlats), 2)])
     offset = .000045
@@ -27,7 +34,7 @@ def createLineString(geom, is_forward):
     return ls
 
 
-def processTile(out, file_name):
+def process_tile(out, file_name):
     # Parse zoom, x, y, out of file name
     groups = re.search("(\d+)-(\d+)-(\d+).events.pbf", file_name).groups()
     zoom = int(groups[0])
@@ -54,7 +61,6 @@ def processTile(out, file_name):
         print("Loading binned events")
         binned_events = load_binned_events(fileContent)
         print("Loaded %d binned events" % len(binned_events))
-        scaled_counts = None
 
         # Loop over each reference
         forward_count = 0
@@ -63,7 +69,6 @@ def processTile(out, file_name):
         for event in binned_events:
             geom = None
             forward = None
-            scaled_counts = event.scaled_counts
             bin_length = event.get_bin_length()
             reference_length = event.reference_length
 
@@ -81,14 +86,10 @@ def processTile(out, file_name):
                 print("Could not find geom for ref %s" % event.reference_id)
                 continue
 
-            line = createLineString(geom, forward)
+            line = create_line_string(geom, forward)
 
-            # data indexed as a multi-dimentional array {dataType}{binPosition}{periodOffset}
-            types = ['pickup', 'dropoff']
-            for t in types:
-                if t not in event.data:
-                    continue
-                datum = event.data.get(t)
+            # data indexed as a multi-dimentional array {dataType}{binPosition}
+            for event_type, datum in event.data.items():
                 for bin_pos, bin_obj in datum.items():
                     total_ct = 0
                     for period_offset, obs in bin_obj.items():
@@ -104,7 +105,7 @@ def processTile(out, file_name):
                         'type': 'Feature',
                         'properties': {
                             'referenceId': event.reference_id,
-                            'eventType': t,
+                            'eventType': event_type,
                             'eventCount': total_ct,
                             'tile': "%d-%d-%d" % (zoom, x, y)
                         },
@@ -121,29 +122,27 @@ def processTile(out, file_name):
 
 output = []
 
-# You can read all tiles from a specific directory if you want
-input_path = '/Users/dschnurr/Downloads/ss-dc-tiles/output_tiles/2017-10-30/events'
-input_files = [f for f in listdir(input_path) if isfile(join(input_path, f))]
 
-# However that is *a lot* of data, for now we'll just pick a few tiles downtown
-# input_files = [
-    #'12-1170-1566.events.pbf',
-    #'12-1170-1567.events.pbf',
-    #'12-1170-1565.events.pbf',
-    #'12-1171-1566.events.pbf',
-    #'12-1171-1567.events.pbf',
-    #'12-1171-1565.events.pbf',
-    #'12-1172-1566.events.pbf',
-    #'12-1172-1567.events.pbf',
-    #'12-1172-1565.events.pbf'
-# ]
+def is_pbf_file(path):
+    return isfile(path) and path.endswith('.events.pbf')
 
-for i, filename in enumerate(input_files):
+
+if input_path.endswith('.pbf'):
+    input_files = [input_path]
+else:
+    input_files = [join(input_path, f) for f in listdir(input_path)]
+
+input_files = [f for f in input_files if is_pbf_file(f)]
+
+if len(input_files) < 1:
+    sys.exit("No files found in input path")
+
+for i, file_path in enumerate(input_files):
     print("Processing file (%d of %d)" % (i + 1, len(input_files)))
-    processTile(output, join(input_path, filename))
+    process_tile(output, file_path)
 
 print("Length %d" % len(output))
 geojson = dict(type='FeatureCollection', features=output)
-out_file = open("output.json", "w")
+out_file = open(output_file, "w")
 out_file.write(json.dumps(geojson, indent=2))
 out_file.close()

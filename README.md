@@ -1,89 +1,44 @@
 # SharedStreets (Python)
 
-Python implementation of [SharedStreets Reference System](https://github.com/sharedstreets/sharedstreets-ref-system).
+This fork has utilities for turning event SharedStreets event tiles into geojson.
 
-## Install
+See https://github.com/sharedstreets/sharedstreets-python for source project README.
 
-1.  Install [from PyPI with Pip](https://packaging.python.org/tutorials/installing-packages/#installing-from-pypi).
+## Setup
+
+1. Clone this fork
+
+        git clone git@github.com:schnerd/sharedstreets-python.git
+        cd sharedstreets-python
+
+1. Clone the SharedStreets-Python git repository and prepare a
+    [Python virtual environment](http://docs.python-guide.org/en/latest/dev/virtualenvs/#virtualenv) running Python 3.
+
+1.  Install the `sharedstreets` module, keeping it editable
     
-        pip install sharedstreets
+        pip install --editable .
 
-2.  Try downloading a single tile to GeoJSON.
-
-        sharedstreets-get-tile 16 10509 25324 > 16-10509-25324.geojson
+1.  Install shapely dependency
+    
+        pip install shapely
 
 ## Use
 
-#### GeoJSON Functions
+### Convert events tile to.
 
--   Retrieve a tile and convert to GeoJSON in Python.
+If you just ran the [SharedStreets matcher](https://github.com/sharedstreets/sharedstreets-matcher), chances are you ended up with tiles containing `SharedStreetsWeeklyBinnedLinearReferences`. You can use `events-to-geojson.py` to convert this to a geojson file, suitable for visualization in kepler.
 
-        import sharedstreets.tile
-        tile = sharedstreets.tile.get_tile(16, 10508, 25324)
-        geojson = sharedstreets.tile.make_geojson(tile)
+```
+python events-to-geojson.py [input_path] [output_file]
+```
 
--   Run a debug webserver and request a tile at [`/tile/16/10508/25324.geojson`](http://127.0.0.1:5000/tile/16/10508/25324.geojson).
+For example:
+```
+python events-to-geojson.py ../event_tiles ./events.geojson
+```
 
-        sharedstreets-debug-webapp
+### Other scripts
 
--   Run a production webserver under [Gunicorn](http://gunicorn.org/).
+`events-aggregate.py` can be used to convert `SharedStreetsWeeklyBinnedLinearReferences` to `SharedStreetsBinnedLinearReferences`.
 
-        gunicorn sharedstreets.webapp:app
-
-### Analysis Functions
-
-#### Speed Data
-Read speed data from PBF encoded speed tiles. `flatten_weekly_speed_histogram` returns an array of arrays representing individual histogram bins with the structure `[sharedstreets_referenceId, period_hour_of_week, bin_kmh, observation_count]`: 
-
-        import sharedstreets.speeds
-        with open('12-946-1650.speeds.pbf', 'rb') as file:
-            fileContent = file.read()
-            observations = speeds.flatten_weekly_speed_histogram(fileContent)
-            print(observations)
-            
-#### Binned Linear Data
-Read linear references from PBF encoded event tiles. `flatten_binned_events` returns an array of arrays representing individual event counts for linear bins `[sharedstreets_referenceId, reference_length, number_of_bins, bin_position, data_type, observation_count, observation_value]`: 
-
-        import sharedstreets.linear_references
-        with open('12-946-1650.events.pbf', 'rb') as file:
-            fileContent = file.read()
-            observations = linear_references.load_binned_events(fileContent)
-            
-            # shows all items as flattened arrays 
-            for observation in observations:
-                for flattened_observation in observation.flatten():
-                    print(flattened_observation)
-
-            # shows only items passing the filter criteria (e.g. min of 2 counts per bin/time period)
-            for observation in observations:
-                observation.filter(2) # filter by min count per bin/time period
-                for flattened_observation in observation.flatten():
-                    print(flattened_observation)
-
-            
-        
-
-## Develop
-
-Install for local development.
-
-1.  Clone the SharedStreets-Python git repository and prepare a
-    [Python virtual environment](http://docs.python-guide.org/en/latest/dev/virtualenvs/#virtualenv) running Python 3.
-
-2.  Install the `sharedstreets` module, keeping it editable, and run test suite.
-    
-        pip install --editable .
-        python setup.py test
-
-## Protobufs
-
-Current `.proto` files can can be found at
-[sharedstreets/sharedstreets-ref-system](https://github.com/sharedstreets/sharedstreets-ref-system/tree/master/proto).
-
-[Install `protoc`](https://github.com/google/protobuf) and
-[follow Python directions](https://developers.google.com/protocol-buffers/docs/reference/python-generated#invocation)
-to regenerate `sharedstreets/sharedstreets_pb2.py` if necessary:
-
-    protoc -I=sharedstreets-ref-system/proto/ \
-        --python_out=sharedstreets/ \
-        sharedstreets-ref-system/proto/sharedstreets.proto
+`events-filter.py` can be used to filter out non-desirable event types from tiles.
