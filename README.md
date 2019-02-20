@@ -11,8 +11,7 @@ See https://github.com/sharedstreets/sharedstreets-python for source project REA
         git clone git@github.com:schnerd/sharedstreets-python.git
         cd sharedstreets-python
 
-1. Clone the SharedStreets-Python git repository and prepare a
-    [Python virtual environment](http://docs.python-guide.org/en/latest/dev/virtualenvs/#virtualenv) running Python 3.
+1. Prepare a [Python virtual environment](http://docs.python-guide.org/en/latest/dev/virtualenvs/#virtualenv) running Python 3.
 
 1.  Install the `sharedstreets` module, keeping it editable
     
