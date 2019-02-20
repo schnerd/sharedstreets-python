@@ -23,7 +23,7 @@ See https://github.com/sharedstreets/sharedstreets-python for source project REA
 
 ## Use
 
-### Convert events tile to.
+### Convert events tiles to geojson file
 
 If you just ran the [SharedStreets matcher](https://github.com/sharedstreets/sharedstreets-matcher), chances are you ended up with tiles containing `SharedStreetsWeeklyBinnedLinearReferences`. You can use `events-to-geojson.py` to convert this to a geojson file, suitable for visualization in kepler.
 
