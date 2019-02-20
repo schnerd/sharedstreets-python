@@ -1,6 +1,6 @@
 # SharedStreets (Python)
 
-This fork has utilities for turning event SharedStreets event tiles into geojson.
+This fork has utilities for turning SharedStreets event tiles into geojson.
 
 See https://github.com/sharedstreets/sharedstreets-python for source project README.
 
